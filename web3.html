@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Drawing NFT Platform</title>
+  <title>Drawing NFT Platform - Pinata IPFS Upload</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -40,7 +40,7 @@
       background-color: #cccccc;
       cursor: not-allowed;
     }
-    input, textarea, select {
+    input, textarea {
       width: 100%;
       padding: 8px;
       margin: 8px 0;
@@ -53,42 +53,6 @@
       font-weight: bold;
       color: #555;
     }
-    .drawing-item {
-      background-color: white;
-      padding: 10px;
-      margin: 10px 0;
-      border-radius: 4px;
-      border: 1px solid #ddd;
-    }
-    .gallery {
-      display: flex;
-      justify-content: space-around;
-      flex-wrap: wrap;
-      margin-top: 20px;
-      gap: 15px;
-    }
-    .gallery-item {
-      width: 30%;
-      min-width: 300px;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      background-color: white;
-      text-align: center;
-    }
-    .gallery-item img {
-      width: 100%;
-      height: 200px;
-      object-fit: cover;
-      display: block;
-    }
-    .gallery-title {
-      padding: 10px;
-      font-weight: bold;
-      background-color: #f5f5f5;
-      border-top: 1px solid #eee;
-    }
     .drawing-tools {
       display: flex;
       gap: 10px;
@@ -100,28 +64,25 @@
       border-radius: 4px;
       background-color: white;
     }
-    @media (max-width: 768px) {
-      .gallery-item {
-        width: 45%;
-      }
-    }
-    @media (max-width: 480px) {
-      .gallery-item {
-        width: 100%;
-      }
+    .error {
+      color: red;
+      margin-top: 10px;
+      padding: 10px;
+      border: 1px solid red;
+      background: #fff8f8;
     }
   </style>
 </head>
 <body>
-  <h1>Drawing NFT Platform</h1>
+  <h1>Drawing NFT Platform - Pinata IPFS Upload</h1>
 
   <div class="container">
     <div class="section">
       <h2>Connection</h2>
       <p>Status: <span id="status" class="status">Disconnected</span></p>
       <p>Account: <span id="account">Not connected</span></p>
-      <p>Role: <span id="role">Unknown</span></p>
       <button id="connectButton">Connect Wallet</button>
+      <div id="errorMessage"></div>
     </div>
 
     <div id="creatorSection" class="section">
@@ -130,48 +91,15 @@
         <label for="brushColor">Brush Color:</label>
         <input type="color" id="brushColor" value="#000000">
         <label for="brushSize">Brush Size:</label>
-        <input type="range" id="brushSize" min="1" max="50" value="5">
+        <input type="range" id="brushSize" min="1" max=50" value="5">
         <button id="clearCanvasButton">Clear Canvas</button>
       </div>
       <canvas id="drawingCanvas" width="600" height="400"></canvas>
       <input id="title" type="text" placeholder="Enter drawing title">
       <input id="royaltyPercentage" type="number" placeholder="Royalty percentage (0-1000 basis points)" max="1000">
-      <button id="mintButton">Save and Mint Drawing</button>
-    </div>
-
-    <div id="ownerSection" style="display:none" class="section">
-      <h2>Owner Controls</h2>
-      <div>
-        <h3>Change Mint Price</h3>
-        <input id="newMintPrice" type="number" placeholder="New mint price in wei">
-        <button id="changeMintPriceButton">Update Mint Price</button>
-      </div>
-      <div>
-        <h3>Transfer Ownership</h3>
-        <input id="newOwnerAddress" type="text" placeholder="Enter new owner address">
-        <button id="transferOwnershipButton">Transfer Ownership</button>
-      </div>
-    </div>
-
-    <div id="sellerSection" class="section">
-      <h2>List Drawing for Sale</h2>
-      <input id="listTokenId" type="number" placeholder="Enter token ID to list">
-      <input id="listPrice" type="number" placeholder="Price in wei">
-      <button id="listButton">List for Sale</button>
-    </div>
-
-    <div id="buyerSection" class="section">
-      <h2>Buy Drawing</h2>
-      <input id="buyTokenId" type="number" placeholder="Enter token ID to buy">
-      <button id="buyButton">Buy Drawing</button>
-    </div>
-
-    <div class="section">
-      <h2>Drawing Gallery</h2>
-      <button id="refreshGalleryButton">Refresh Gallery</button>
-      <div id="gallery" class="gallery">
-        <p>No drawings yet</p>
-      </div>
+      <button id="mintButton">Save to Pinata IPFS and Mint</button>
+      <p>IPFS Hash: <span id="ipfsHashDisplay"></span></p>
+      <div id="errorMessageIPFS"></div>
     </div>
   </div>
 
@@ -179,19 +107,20 @@
   <script src="ethers.min.js" type="application/javascript"></script>
   <script src="https://unpkg.com/ipfs-http-client@60.0.2/dist/index.min.js"></script>
   <script>
-    // Initialize IPFS client (using Infura's IPFS gateway as an example)
+    // Initialize IPFS client with Pinata
     const ipfs = window.IpfsHttpClient.create({
-      host: 'ipfs.infura.io',
-      port: 5001,
+      host: 'api.pinata.cloud',
+      port: 443,
       protocol: 'https',
       headers: {
-        authorization: 'Basic ' + btoa('YOUR_INFURA_PROJECT_ID:YOUR_INFURA_API_SECRET') // Replace with your Infura credentials
+        pinata_api_key: '705f67a5989f44d9f901', // Replace with your Pinata API Key
+        pinata_secret_api_key: 'db19f55c6d13d9e1590939b22315e5681865f66363bf918fa9e2e8475be791d2' // Replace with your Pinata API Secret
       }
     });
 
     // Contract details
-    let contractAddress = "YOUR_CONTRACT_ADDRESS_HERE"; // Replace with your deployed contract address
-    const contractOwner = "YOUR_CONTRACT_OWNER_ADDRESS_HERE"; // Replace with the owner's address
+    let contractAddress = "0x09496ed954dacbbc7f88a5b06fcf3c62e27ec9d2"; // Replace with your deployed contract address
+    const contractOwner = "0xEdbA99b7F64530A7b598223435CC4d9Ca766bd41"; // Replace with the owner's address
 
     // Variables for contract interaction
     let provider, signer, contract;
@@ -203,8 +132,6 @@
     const connectButton = document.getElementById('connectButton');
     const statusElement = document.getElementById('status');
     const accountElement = document.getElementById('account');
-    const roleElement = document.getElementById('role');
-    const ownerSection = document.getElementById('ownerSection');
     const creatorSection = document.getElementById('creatorSection');
     const drawingCanvas = document.getElementById('drawingCanvas');
     const brushColor = document.getElementById('brushColor');
@@ -213,17 +140,9 @@
     const title = document.getElementById('title');
     const royaltyPercentage = document.getElementById('royaltyPercentage');
     const mintButton = document.getElementById('mintButton');
-    const newMintPrice = document.getElementById('newMintPrice');
-    const changeMintPriceButton = document.getElementById('changeMintPriceButton');
-    const newOwnerAddress = document.getElementById('newOwnerAddress');
-    const transferOwnershipButton = document.getElementById('transferOwnershipButton');
-    const listTokenId = document.getElementById('listTokenId');
-    const listPrice = document.getElementById('listPrice');
-    const listButton = document.getElementById('listButton');
-    const buyTokenId = document.getElementById('buyTokenId');
-    const buyButton = document.getElementById('buyButton');
-    const gallery = document.getElementById('gallery');
-    const refreshGalleryButton = document.getElementById('refreshGalleryButton');
+    const ipfsHashDisplay = document.getElementById('ipfsHashDisplay');
+    const errorMessage = document.getElementById('errorMessage');
+    const errorMessageIPFS = document.getElementById('errorMessageIPFS');
 
     // Canvas drawing setup
     const ctx = drawingCanvas.getContext('2d');
@@ -270,28 +189,26 @@
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
         abi = await response.json();
         console.log("ABI loaded successfully:", abi.length, "entries");
-        connectButton.disabled = false;
         statusElement.innerText = "Contract ABI loaded successfully";
       } catch (error) {
         console.error("Error loading ABI:", error);
         statusElement.innerText = "Error loading ABI file";
-        document.querySelector('.section:first-of-type').insertAdjacentHTML('beforeend', `
-          <div style="color: red; margin-top: 10px; padding: 10px; border: 1px solid red; background: #fff8f8;">
-            <p><strong>Error loading ABI:</strong> ${error.message}</p>
-            <p>Please check that:</p>
+        errorMessage.innerHTML = `
+          <div class="error">
+            <p><strong>Error:</strong> ${error.message}</p>
+            <p>Please ensure:</p>
             <ul>
-              <li>You're running this page from a web server</li>
+              <li>You are running this page from a web server</li>
               <li>The abi.json file is in the correct location</li>
-              <li>Your web server has proper CORS settings</li>
+              <li>CORS settings are enabled on your server</li>
             </ul>
           </div>
-        `);
+        `;
       }
     }
 
     // Initialize the page
     async function init() {
-      connectButton.disabled = true;
       statusElement.innerText = "Initializing...";
       await loadABI();
     }
@@ -327,19 +244,21 @@
 
           statusElement.innerText = "Connected";
           accountElement.innerText = userAddress;
-          roleElement.innerText = isOwner ? "Owner" : "User";
-          ownerSection.style.display = isOwner ? "block" : "none";
           creatorSection.style.display = "block";
-          await loadGallery();
         }
       } catch (error) {
         console.error("Connection error:", error);
         statusElement.innerText = "Connection failed: " + error.message;
+        errorMessage.innerHTML = `
+          <div class="error">
+            <p><strong>Error:</strong> ${error.message}</p>
+          </div>
+        `;
       }
     }
 
-    // Save drawing to IPFS and mint as NFT
-    async function saveAndMintDrawing() {
+    // Upload to Pinata IPFS and mint
+    async function saveToPinataAndMint() {
       const titleValue = title.value.trim();
       const royalty = parseInt(royaltyPercentage.value) || 0;
 
@@ -349,172 +268,50 @@
       }
 
       try {
-        statusElement.innerText = "Saving drawing to IPFS...";
-        
+        errorMessageIPFS.innerHTML = ""; // Clear previous errors
+        statusElement.innerText = "Converting canvas to image...";
+
         // Convert canvas to Blob
         const dataUrl = drawingCanvas.toDataURL('image/png');
         const response = await fetch(dataUrl);
         const blob = await response.blob();
-        
-        // Upload to IPFS
+
+        statusElement.innerText = "Uploading to Pinata IPFS...";
         const result = await ipfs.add(blob);
         const ipfsHash = result.path;
+        ipfsHashDisplay.innerText = ipfsHash;
         console.log("IPFS Hash:", ipfsHash);
 
-        statusElement.innerText = "Minting drawing...";
+        statusElement.innerText = "Minting NFT...";
         const tx = await contract.mintDrawingNFT(ipfsHash, titleValue, royalty, { value: await contract.mintPrice() });
         await tx.wait();
-        statusElement.innerText = "Drawing minted successfully!";
+        statusElement.innerText = "NFT minted successfully!";
         clearCanvas();
         title.value = "";
         royaltyPercentage.value = "";
-        await loadGallery();
+        ipfsHashDisplay.innerText = "";
       } catch (error) {
-        console.error("Error saving and minting drawing:", error);
-        statusElement.innerText = "Error saving and minting drawing: " + error.message;
-      }
-    }
-
-    // Change mint price (owner only)
-    async function changeMintPrice() {
-      if (!isOwner) {
-        alert("Only the owner can change the mint price");
-        return;
-      }
-
-      const newPrice = parseInt(newMintPrice.value) || 0;
-      if (!newPrice) {
-        alert("Please enter a valid price in wei");
-        return;
-      }
-
-      try {
-        statusElement.innerText = "Changing mint price...";
-        const tx = await contract.changeMintPrice(newPrice);
-        await tx.wait();
-        statusElement.innerText = "Mint price changed successfully!";
-        newMintPrice.value = "";
-      } catch (error) {
-        console.error("Error changing mint price:", error);
-        statusElement.innerText = "Error changing mint price: " + error.message;
-      }
-    }
-
-    // Transfer ownership (owner only)
-    async function transferOwnership() {
-      if (!isOwner) {
-        alert("Only the owner can transfer ownership");
-        return;
-      }
-
-      const newOwner = newOwnerAddress.value.trim();
-      if (!ethers.isAddress(newOwner)) {
-        alert("Please enter a valid Ethereum address");
-        return;
-      }
-
-      try {
-        statusElement.innerText = "Transferring ownership...";
-        const tx = await contract.changeOwner(newOwner);
-        await tx.wait();
-        statusElement.innerText = "Ownership transferred successfully!";
-        newOwnerAddress.value = "";
-        isOwner = false;
-        ownerSection.style.display = "none";
-      } catch (error) {
-        console.error("Error transferring ownership:", error);
-        statusElement.innerText = "Error transferring ownership: " + error.message;
-      }
-    }
-
-    // List a drawing for sale
-    async function listDrawingForSale() {
-      const tokenId = parseInt(listTokenId.value) || 0;
-      const price = parseInt(listPrice.value) || 0;
-
-      if (!tokenId || !price) {
-        alert("Please enter a valid token ID and price in wei");
-        return;
-      }
-
-      try {
-        statusElement.innerText = "Listing drawing...";
-        const tx = await contract.listDrawingForSale(tokenId, price);
-        await tx.wait();
-        statusElement.innerText = "Drawing listed successfully!";
-        listTokenId.value = "";
-        listPrice.value = "";
-      } catch (error) {
-        console.error("Error listing drawing:", error);
-        statusElement.innerText = "Error listing drawing: " + error.message;
-      }
-    }
-
-    // Buy a drawing
-    async function buyDrawing() {
-      const tokenId = parseInt(buyTokenId.value) || 0;
-
-      if (!tokenId) {
-        alert("Please enter a valid token ID");
-        return;
-      }
-
-      try {
-        statusElement.innerText = "Buying drawing...";
-        const price = await contract.mintPrice(); // Placeholder; update with actual listing price if implemented
-        const tx = await contract.buyDrawing(tokenId, { value: price });
-        await tx.wait();
-        statusElement.innerText = "Drawing bought successfully!";
-        buyTokenId.value = "";
-        await loadGallery();
-      } catch (error) {
-        console.error("Error buying drawing:", error);
-        statusElement.innerText = "Error buying drawing: " + error.message;
-      }
-    }
-
-    // Load gallery of drawings
-    async function loadGallery() {
-      if (!contract) {
-        alert("Please connect your wallet first");
-        return;
-      }
-
-      try {
-        gallery.innerHTML = "<p>Loading drawings...</p>";
-        const tokenCount = await contract.tokenCounter();
-        gallery.innerHTML = "";
-
-        for (let i = 1; i < tokenCount; i++) {
-          const [creator, royaltyReceiver, ipfsHash, title, timestamp, royaltyPercentage] = await contract.getDrawingMetadata(i);
-          const item = document.createElement('div');
-          item.className = 'gallery-item';
-          item.innerHTML = `
-            <img src="https://ipfs.io/ipfs/${ipfsHash}" alt="${title}" onerror="this.src='https://via.placeholder.com/300x200?text=Image+Not+Found';">
-            <div class="gallery-title">${title} (Token ID: ${i})</div>
-            <p>Creator: ${creator}</p>
-            <p>Royalty: ${royaltyPercentage / 100}%</p>
-          `;
-          gallery.appendChild(item);
-        }
-
-        if (tokenCount === 1) {
-          gallery.innerHTML = "<p>No drawings yet</p>";
-        }
-      } catch (error) {
-        console.error("Error loading gallery:", error);
-        gallery.innerHTML = `<p>Error loading gallery: ${error.message}</p>`;
+        console.error("Error uploading to Pinata IPFS or minting:", error);
+        statusElement.innerText = "Error occurred";
+        errorMessageIPFS.innerHTML = `
+          <div class="error">
+            <p><strong>Error:</strong> ${error.message}</p>
+            <p>Possible issues:</p>
+            <ul>
+              <li>Invalid Pinata API Key or Secret</li>
+              <li>Network connectivity issues</li>
+              <li>File size limit exceeded (check Pinata limits)</li>
+            </ul>
+            <p>Check the console for details.</p>
+          </div>
+        `;
       }
     }
 
     // Add event listeners
     connectButton.addEventListener('click', connectWallet);
-    mintButton.addEventListener('click', saveAndMintDrawing);
-    changeMintPriceButton.addEventListener('click', changeMintPrice);
-    transferOwnershipButton.addEventListener('click', transferOwnership);
-    listButton.addEventListener('click', listDrawingForSale);
-    buyButton.addEventListener('click', buyDrawing);
-    refreshGalleryButton.addEventListener('click', loadGallery);
+    mintButton.addEventListener('click', saveToPinataAndMint);
+    clearCanvasButton.addEventListener('click', clearCanvas);
 
     // Initialize the application
     init();
