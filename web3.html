@@ -91,7 +91,7 @@
         <label for="brushColor">Brush Color:</label>
         <input type="color" id="brushColor" value="#000000">
         <label for="brushSize">Brush Size:</label>
-        <input type="range" id="brushSize" min="1" max=50" value="5">
+        <input type="range" id="brushSize" min="1" max="50" value="5">
         <button id="clearCanvasButton">Clear Canvas</button>
       </div>
       <canvas id="drawingCanvas" width="600" height="400"></canvas>
@@ -105,28 +105,40 @@
 
   <!-- Load Ethers.js and IPFS client -->
   <script src="ethers.min.js" type="application/javascript"></script>
-  <script src="https://unpkg.com/ipfs-http-client@60.0.2/dist/index.min.js"></script>
+  <script src="https://unpkg.com/ipfs-http-client@59.0.0/dist/index.min.js"></script>
   <script>
-    // Initialize IPFS client with Pinata
+    // Check if IpfsHttpClient is available
+    if (typeof window.IpfsHttpClient === 'undefined') {
+      console.error("IpfsHttpClient is not loaded. Check the CDN script.");
+      document.getElementById('errorMessage').innerHTML = `
+        <div class="error">
+          <p><strong>Error:</strong> Failed to load IPFS HTTP Client library. Please check your internet connection or try refreshing the page.</p>
+        </div>
+      `;
+      throw new Error("IpfsHttpClient not loaded");
+    }
+
+    // Initialize IPFS client with Pinata using JWT
     const ipfs = window.IpfsHttpClient.create({
-      host: 'api.pinata.cloud',
+      host: 'gateway.pinata.cloud', // Use Pinata gateway
       port: 443,
       protocol: 'https',
       headers: {
-        pinata_api_key: '705f67a5989f44d9f901', // Replace with your Pinata API Key
-        pinata_secret_api_key: 'db19f55c6d13d9e1590939b22315e5681865f66363bf918fa9e2e8475be791d2' // Replace with your Pinata API Secret
+        Authorization: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySW5mb3JtYXRpb24iOnsiaWQiOiJiN2ZkNTEwNS01NGVkLTQzNGItOWI4Ny0wYTA5ZTlkYjkwNTgiLCJlbWFpbCI6ImlhbmxpZWJlcm1hbjA3QGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJwaW5fcG9saWN5Ijp7InJlZ2lvbnMiOlt7ImRlc2lyZWRSZXBsaWNhdGlvbkNvdW50IjoxLCJpZCI6IkZSQTEifSx7ImRlc2lyZWRSZXBsaWNhdGlvbkNvdW50IjoxLCJpZCI6Ik5ZQzEifV0sInZlcnNpb24iOjF9LCJtZmFfZW5hYmxlZCI6ZmFsc2UsInN0YXR1cyI6IkFDVElWRSJ9LCJhdXRoZW50aWNhdGlvblR5cGUiOiJzY29wZWRLZXkiLCJzY29wZWRLZXlLZXkiOiJjNTI2NzQ3ZGUzYTU5YTNiNGFlNCIsInNjb3BlZEtleVNlY3JldCI6IjNiNDZkYjE5M2VmMzlmMDM1NjcyZmQ3ZTVjOTA2MjJiMzI5YmVmN2NkMzc5MTA5MGIxMDdiMzQ5MjU2MDU0OGQiLCJleHAiOjE3NzM4MDk5NjJ9.5gxD1PeCx_wd4uy9V7f8Ad2YXxddZtzuhqd4D9RkHSE` // Your JWT token
       }
     });
 
     // Contract details
-    let contractAddress = "0x09496ed954dacbbc7f88a5b06fcf3c62e27ec9d2"; // Replace with your deployed contract address
-    const contractOwner = "0xEdbA99b7F64530A7b598223435CC4d9Ca766bd41"; // Replace with the owner's address
+    let contractAddress = "0x09496ed954dacbbc7f88a5b06fcf3c62e27ec9d2";
+    const contractOwner = "0xEdbA99b7F64530A7b598223435CC4d9Ca766bd41";
 
     // Variables for contract interaction
     let provider, signer, contract;
     let userAddress = null;
     let isOwner = false;
     let abi = null;
+    let canvasInitialized = false;
+    let isConnecting = false;
 
     // DOM Elements
     const connectButton = document.getElementById('connectButton');
@@ -146,23 +158,35 @@
 
     // Canvas drawing setup
     const ctx = drawingCanvas.getContext('2d');
+    if (!ctx) {
+      console.error("Failed to get 2D context for canvas");
+      errorMessage.innerHTML = '<div class="error"><p>Canvas context failed to initialize. Check browser compatibility.</p></div>';
+      canvasInitialized = false;
+    } else {
+      canvasInitialized = true;
+    }
+
     let isDrawing = false;
     let lastX = 0;
     let lastY = 0;
 
-    drawingCanvas.addEventListener('mousedown', startDrawing);
-    drawingCanvas.addEventListener('mousemove', draw);
-    drawingCanvas.addEventListener('mouseup', stopDrawing);
-    drawingCanvas.addEventListener('mouseout', stopDrawing);
-    clearCanvasButton.addEventListener('click', clearCanvas);
+    if (canvasInitialized) {
+      drawingCanvas.addEventListener('mousedown', startDrawing);
+      drawingCanvas.addEventListener('mousemove', draw);
+      drawingCanvas.addEventListener('mouseup', stopDrawing);
+      drawingCanvas.addEventListener('mouseout', stopDrawing);
+      clearCanvasButton.addEventListener('click', clearCanvas);
+    }
 
     function startDrawing(e) {
       isDrawing = true;
       [lastX, lastY] = [e.offsetX, e.offsetY];
+      console.log("Started drawing at:", lastX, lastY);
     }
 
     function draw(e) {
       if (!isDrawing) return;
+      console.log("Drawing to:", e.offsetX, e.offsetY);
       ctx.beginPath();
       ctx.moveTo(lastX, lastY);
       ctx.lineTo(e.offsetX, e.offsetY);
@@ -175,10 +199,13 @@
 
     function stopDrawing() {
       isDrawing = false;
+      console.log("Stopped drawing");
     }
 
     function clearCanvas() {
-      ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+      if (canvasInitialized) {
+        ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+      }
     }
 
     // Load ABI from file
@@ -215,6 +242,19 @@
 
     // Connect to wallet
     async function connectWallet() {
+      if (isConnecting) {
+        errorMessage.innerHTML = `
+          <div class="error">
+            <p><strong>Error:</strong> A wallet connection request is already in progress. Please wait.</p>
+          </div>
+        `;
+        return;
+      }
+
+      isConnecting = true;
+      connectButton.disabled = true;
+      connectButton.textContent = "Connecting...";
+
       try {
         if (!abi) {
           alert("Contract ABI not loaded. Please refresh the page and try again.");
@@ -248,17 +288,34 @@
         }
       } catch (error) {
         console.error("Connection error:", error);
-        statusElement.innerText = "Connection failed: " + error.message;
+        let errorMsg = error.message;
+        if (error.code === -32002) {
+          errorMsg = "A MetaMask connection request is already pending. Please open MetaMask, approve or deny the request, or try refreshing the page.";
+        }
+        statusElement.innerText = "Connection failed: " + errorMsg;
         errorMessage.innerHTML = `
           <div class="error">
-            <p><strong>Error:</strong> ${error.message}</p>
+            <p><strong>Error:</strong> ${errorMsg}</p>
           </div>
         `;
+      } finally {
+        isConnecting = false;
+        connectButton.disabled = false;
+        connectButton.textContent = "Connect Wallet";
       }
     }
 
     // Upload to Pinata IPFS and mint
     async function saveToPinataAndMint() {
+      if (!canvasInitialized) {
+        errorMessageIPFS.innerHTML = `
+          <div class="error">
+            <p><strong>Error:</strong> Canvas not initialized. Cannot proceed with minting.</p>
+          </div>
+        `;
+        return;
+      }
+
       const titleValue = title.value.trim();
       const royalty = parseInt(royaltyPercentage.value) || 0;
 
@@ -275,6 +332,10 @@
         const dataUrl = drawingCanvas.toDataURL('image/png');
         const response = await fetch(dataUrl);
         const blob = await response.blob();
+
+        // Log blob size for debugging
+        const blobSize = blob.size / 1024; // Size in KB
+        console.log("Blob size:", blobSize, "KB");
 
         statusElement.innerText = "Uploading to Pinata IPFS...";
         const result = await ipfs.add(blob);
@@ -293,15 +354,31 @@
       } catch (error) {
         console.error("Error uploading to Pinata IPFS or minting:", error);
         statusElement.innerText = "Error occurred";
+        let errorMsg = "An error occurred while uploading to Pinata IPFS or minting.";
+        let possibleIssues = `
+          <ul>
+            <li>Invalid Pinata JWT token</li>
+            <li>Network connectivity issues</li>
+            <li>File size limit exceeded (check Pinata limits)</li>
+          </ul>
+        `;
+
+        // Check for specific Pinata error codes (e.g., 401, 403, 429)
+        if (error.message.includes("401")) {
+          errorMsg = "Unauthorized: Invalid Pinata JWT token.";
+        } else if (error.message.includes("413")) {
+          errorMsg = "File size limit exceeded. Check Pinata limits.";
+        } else if (error.message.includes("network")) {
+          errorMsg = "Network connectivity issue detected.";
+        } else if (error.message.includes("404")) {
+          errorMsg = "Endpoint not found. The Pinata API endpoint might be incorrect or deprecated.";
+        }
+
         errorMessageIPFS.innerHTML = `
           <div class="error">
-            <p><strong>Error:</strong> ${error.message}</p>
+            <p><strong>Error:</strong> ${errorMsg}</p>
             <p>Possible issues:</p>
-            <ul>
-              <li>Invalid Pinata API Key or Secret</li>
-              <li>Network connectivity issues</li>
-              <li>File size limit exceeded (check Pinata limits)</li>
-            </ul>
+            ${possibleIssues}
             <p>Check the console for details.</p>
           </div>
         `;
