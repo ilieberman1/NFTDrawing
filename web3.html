@@ -103,31 +103,9 @@
     </div>
   </div>
 
-  <!-- Load Ethers.js and IPFS client -->
+  <!-- Load Ethers.js (no longer need ipfs-http-client) -->
   <script src="ethers.min.js" type="application/javascript"></script>
-  <script src="https://unpkg.com/ipfs-http-client@59.0.0/dist/index.min.js"></script>
   <script>
-    // Check if IpfsHttpClient is available
-    if (typeof window.IpfsHttpClient === 'undefined') {
-      console.error("IpfsHttpClient is not loaded. Check the CDN script.");
-      document.getElementById('errorMessage').innerHTML = `
-        <div class="error">
-          <p><strong>Error:</strong> Failed to load IPFS HTTP Client library. Please check your internet connection or try refreshing the page.</p>
-        </div>
-      `;
-      throw new Error("IpfsHttpClient not loaded");
-    }
-
-    // Initialize IPFS client with Pinata using JWT
-    const ipfs = window.IpfsHttpClient.create({
-      host: 'gateway.pinata.cloud', // Use Pinata gateway
-      port: 443,
-      protocol: 'https',
-      headers: {
-        Authorization: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySW5mb3JtYXRpb24iOnsiaWQiOiJiN2ZkNTEwNS01NGVkLTQzNGItOWI4Ny0wYTA5ZTlkYjkwNTgiLCJlbWFpbCI6ImlhbmxpZWJlcm1hbjA3QGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJwaW5fcG9saWN5Ijp7InJlZ2lvbnMiOlt7ImRlc2lyZWRSZXBsaWNhdGlvbkNvdW50IjoxLCJpZCI6IkZSQTEifSx7ImRlc2lyZWRSZXBsaWNhdGlvbkNvdW50IjoxLCJpZCI6Ik5ZQzEifV0sInZlcnNpb24iOjF9LCJtZmFfZW5hYmxlZCI6ZmFsc2UsInN0YXR1cyI6IkFDVElWRSJ9LCJhdXRoZW50aWNhdGlvblR5cGUiOiJzY29wZWRLZXkiLCJzY29wZWRLZXlLZXkiOiJjNTI2NzQ3ZGUzYTU5YTNiNGFlNCIsInNjb3BlZEtleVNlY3JldCI6IjNiNDZkYjE5M2VmMzlmMDM1NjcyZmQ3ZTVjOTA2MjJiMzI5YmVmN2NkMzc5MTA5MGIxMDdiMzQ5MjU2MDU0OGQiLCJleHAiOjE3NzM4MDk5NjJ9.5gxD1PeCx_wd4uy9V7f8Ad2YXxddZtzuhqd4D9RkHSE` // Your JWT token
-      }
-    });
-
     // Contract details
     let contractAddress = "0x09496ed954dacbbc7f88a5b06fcf3c62e27ec9d2";
     const contractOwner = "0xEdbA99b7F64530A7b598223435CC4d9Ca766bd41";
@@ -306,84 +284,135 @@
     }
 
     // Upload to Pinata IPFS and mint
-    async function saveToPinataAndMint() {
-      if (!canvasInitialized) {
-        errorMessageIPFS.innerHTML = `
-          <div class="error">
-            <p><strong>Error:</strong> Canvas not initialized. Cannot proceed with minting.</p>
-          </div>
-        `;
-        return;
-      }
+    // Replace the saveToPinataAndMint function with this improved version:
+async function saveToPinataAndMint() {
+  if (!canvasInitialized) {
+    errorMessageIPFS.innerHTML = `
+      <div class="error">
+        <p><strong>Error:</strong> Canvas not initialized. Cannot proceed with minting.</p>
+      </div>
+    `;
+    return;
+  }
 
-      const titleValue = title.value.trim();
-      const royalty = parseInt(royaltyPercentage.value) || 0;
+  // Disable the mint button to prevent multiple clicks
+  mintButton.disabled = true;
+  mintButton.textContent = "Processing...";
 
-      if (!titleValue || royalty > 1000) {
-        alert("Please provide a valid title and royalty percentage (max 1000 basis points).");
-        return;
-      }
+  const titleValue = title.value.trim();
+  const royalty = parseInt(royaltyPercentage.value) || 0;
 
-      try {
-        errorMessageIPFS.innerHTML = ""; // Clear previous errors
-        statusElement.innerText = "Converting canvas to image...";
+  if (!titleValue) {
+    alert("Please provide a valid title for your drawing.");
+    mintButton.disabled = false;
+    mintButton.textContent = "Save to Pinata IPFS and Mint";
+    return;
+  }
 
-        // Convert canvas to Blob
-        const dataUrl = drawingCanvas.toDataURL('image/png');
-        const response = await fetch(dataUrl);
-        const blob = await response.blob();
+  if (royalty > 1000) {
+    alert("Royalty percentage cannot exceed 1000 basis points (10%).");
+    mintButton.disabled = false;
+    mintButton.textContent = "Save to Pinata IPFS and Mint";
+    return;
+  }
 
-        // Log blob size for debugging
-        const blobSize = blob.size / 1024; // Size in KB
-        console.log("Blob size:", blobSize, "KB");
+  let pinataResponse = null;
 
-        statusElement.innerText = "Uploading to Pinata IPFS...";
-        const result = await ipfs.add(blob);
-        const ipfsHash = result.path;
-        ipfsHashDisplay.innerText = ipfsHash;
-        console.log("IPFS Hash:", ipfsHash);
+  try {
+    errorMessageIPFS.innerHTML = ""; // Clear previous errors
+    statusElement.innerText = "Converting canvas to image...";
 
-        statusElement.innerText = "Minting NFT...";
-        const tx = await contract.mintDrawingNFT(ipfsHash, titleValue, royalty, { value: await contract.mintPrice() });
-        await tx.wait();
-        statusElement.innerText = "NFT minted successfully!";
-        clearCanvas();
-        title.value = "";
-        royaltyPercentage.value = "";
-        ipfsHashDisplay.innerText = "";
-      } catch (error) {
-        console.error("Error uploading to Pinata IPFS or minting:", error);
-        statusElement.innerText = "Error occurred";
-        let errorMsg = "An error occurred while uploading to Pinata IPFS or minting.";
-        let possibleIssues = `
-          <ul>
-            <li>Invalid Pinata JWT token</li>
-            <li>Network connectivity issues</li>
-            <li>File size limit exceeded (check Pinata limits)</li>
-          </ul>
-        `;
+    // Convert canvas to Blob
+    const dataUrl = drawingCanvas.toDataURL('image/png');
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
 
-        // Check for specific Pinata error codes (e.g., 401, 403, 429)
-        if (error.message.includes("401")) {
-          errorMsg = "Unauthorized: Invalid Pinata JWT token.";
-        } else if (error.message.includes("413")) {
-          errorMsg = "File size limit exceeded. Check Pinata limits.";
-        } else if (error.message.includes("network")) {
-          errorMsg = "Network connectivity issue detected.";
-        } else if (error.message.includes("404")) {
-          errorMsg = "Endpoint not found. The Pinata API endpoint might be incorrect or deprecated.";
-        }
+    // Log blob size for debugging
+    const blobSize = blob.size / 1024; // Size in KB
+    console.log("Blob size:", blobSize, "KB");
 
-        errorMessageIPFS.innerHTML = `
-          <div class="error">
-            <p><strong>Error:</strong> ${errorMsg}</p>
-            <p>Possible issues:</p>
-            ${possibleIssues}
-            <p>Check the console for details.</p>
-          </div>
-        `;
-      }
+    statusElement.innerText = "Uploading to Pinata IPFS...";
+
+    // Prepare the form data for Pinata
+    const formData = new FormData();
+    formData.append('file', blob, 'drawing.png');
+
+    // Optional: Add metadata (e.g., name)
+    const pinataMetadata = JSON.stringify({
+      name: titleValue
+    });
+    formData.append('pinataMetadata', pinataMetadata);
+
+    // Set your Pinata JWT token - replace with your actual token
+    const PINATA_JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySW5mb3JtYXRpb24iOnsiaWQiOiJiN2ZkNTEwNS01NGVkLTQzNGItOWI4Ny0wYTA5ZTlkYjkwNTgiLCJlbWFpbCI6ImlhbmxpZWJlcm1hbjA3QGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJwaW5fcG9saWN5Ijp7InJlZ2lvbnMiOlt7ImRlc2lyZWRSZXBsaWNhdGlvbkNvdW50IjoxLCJpZCI6IkZSQTEifSx7ImRlc2lyZWRSZXBsaWNhdGlvbkNvdW50IjoxLCJpZCI6Ik5ZQzEifV0sInZlcnNpb24iOjF9LCJtZmFfZW5hYmxlZCI6ZmFsc2UsInN0YXR1cyI6IkFDVElWRSJ9LCJhdXRoZW50aWNhdGlvblR5cGUiOiJzY29wZWRLZXkiLCJzY29wZWRLZXlLZXkiOiJjZTM5YTg3MGQwNjM1ODA0MmE2YyIsInNjb3BlZEtleVNlY3JldCI6ImQ2MDFkODU2ODVhNTZmNGYxNGI3OGU3ZjdiZmNhZDdiNmY0NmU0NmJmYmM4ZWU3YjMzNjBjMDBiOGI3MGMwZjciLCJleHAiOjE3NzM4NjcwMzB9.v2IABzSoZSlSH9MpfkYaww-pF2ijMcQDE7sTuWsIv3M"; // Replace this with your valid JWT
+
+    // Make the request to Pinata's /pinning/pinFileToIPFS endpoint
+    pinataResponse = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PINATA_JWT}`
+      },
+      body: formData
+    });
+
+    if (!pinataResponse.ok) {
+      const errorData = await pinataResponse.json().catch(() => ({
+        error: `HTTP error! Status: ${pinataResponse.status}`
+      }));
+      
+      throw new Error(`Pinata API responded with status: ${pinataResponse.status}. ${errorData.error || ''}`);
     }
+
+    const result = await pinataResponse.json();
+    const ipfsHash = result.IpfsHash;
+    ipfsHashDisplay.innerText = ipfsHash;
+    console.log("IPFS Hash:", ipfsHash);
+
+    statusElement.innerText = "Minting NFT...";
+    const tx = await contract.mintDrawingNFT(ipfsHash, titleValue, royalty, { value: await contract.mintPrice() });
+    await tx.wait();
+    statusElement.innerText = "NFT minted successfully!";
+    clearCanvas();
+    title.value = "";
+    royaltyPercentage.value = "";
+  } catch (error) {
+    console.error("Error uploading to Pinata IPFS or minting:", error);
+    statusElement.innerText = "Error occurred";
+    
+    let errorMsg = "An error occurred while uploading to Pinata IPFS or minting.";
+    let possibleIssues = `
+      <ul>
+        <li>Invalid Pinata JWT token</li>
+        <li>Network connectivity issues</li>
+        <li>File size limit exceeded (check Pinata limits)</li>
+        <li>CORS policy blocking the request (try deploying to a live server)</li>
+      </ul>
+    `;
+
+    if (error.message.includes("401")) {
+      errorMsg = "Unauthorized: Invalid Pinata JWT token. Please check your token and try again.";
+    } else if (error.message.includes("413")) {
+      errorMsg = "File size limit exceeded. Check Pinata limits.";
+    } else if (error.message.includes("network")) {
+      errorMsg = "Network connectivity issue detected.";
+    } else if (error.message.includes("CORS")) {
+      errorMsg = "CORS policy blocked the request. Try deploying the app to a live server.";
+    }
+
+    errorMessageIPFS.innerHTML = `
+      <div class="error">
+        <p><strong>Error:</strong> ${errorMsg}</p>
+        <p>Possible issues:</p>
+        ${possibleIssues}
+        <p>Check the console for details.</p>
+      </div>
+    `;
+  } finally {
+    // Re-enable the mint button
+    mintButton.disabled = false;
+    mintButton.textContent = "Save to Pinata IPFS and Mint";
+  }
+}
 
     // Add event listeners
     connectButton.addEventListener('click', connectWallet);
