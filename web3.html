@@ -40,7 +40,7 @@
       background-color: #cccccc;
       cursor: not-allowed;
     }
-    input, textarea {
+    input, textarea, select {
       width: 100%;
       padding: 8px;
       margin: 8px 0;
@@ -58,6 +58,7 @@
       gap: 10px;
       margin-bottom: 10px;
       align-items: center;
+      flex-wrap: wrap;
     }
     canvas {
       border: 1px solid #ccc;
@@ -71,6 +72,17 @@
       border: 1px solid red;
       background: #fff8f8;
     }
+    .shape-controls {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .pdf-upload {
+      margin-top: 10px;
+    }
+    .marketplace {
+      margin-top: 20px;
+    }
   </style>
 </head>
 <body>
@@ -79,9 +91,8 @@
   <div class="container">
     <div class="section">
       <h2>Connection</h2>
-      <p>Status: <span id="status" class="status">Disconnected</span></p>
+      <p>Status: <span id="status" class="status">Initializing...</span></p>
       <p>Account: <span id="account">Not connected</span></p>
-      <button id="connectButton">Connect Wallet</button>
       <div id="errorMessage"></div>
     </div>
 
@@ -93,21 +104,50 @@
         <label for="brushSize">Brush Size:</label>
         <input type="range" id="brushSize" min="1" max="50" value="5">
         <button id="clearCanvasButton">Clear Canvas</button>
+        <button id="drawCircleButton">Draw Circle</button>
+        <button id="drawRectangleButton">Draw Rectangle</button>
+        <button id="drawLineButton">Draw Line</button>
+      </div>
+      <div class="shape-controls">
+        <label for="shapeColor">Shape Color:</label>
+        <input type="color" id="shapeColor" value="#000000">
+        <label for="shapeSize">Shape Size:</label>
+        <input type="range" id="shapeSize" min="10" max="200" value="50">
       </div>
       <canvas id="drawingCanvas" width="600" height="400"></canvas>
       <input id="title" type="text" placeholder="Enter drawing title">
-      <input id="royaltyPercentage" type="number" placeholder="Royalty percentage (0-1000 basis points)" max="1000">
+      <p>Minting Fee: <span id="mintFeeDisplay">Loading...</span> ETH</p>
+      <p>IPFS Upload Fee: 0.001 ETH</p>
       <button id="mintButton">Save to Pinata IPFS and Mint</button>
-      <p>IPFS Hash: <span id="ipfsHashDisplay"></span></p>
+      <div class="pdf-upload">
+        <input type="file" id="pdfFile" accept=".pdf" onchange="handlePdfUpload(event)">
+        <input type="text" id="pdfUrl" placeholder="Or enter PDF URL" onchange="handlePdfUrl(event)">
+      </div>
+      <p>Contract Address: <span id="contractAddressDisplay">0xAaeae7E1b59ee74AD9FB9a077E40C801D2aEDC75</span></p>
+      <p>Image IPFS Link: <span id="imageIpfsLink"></span></p>
+      <p>Metadata IPFS Link: <span id="metadataIpfsLink"></span></p>
+      <p>Token ID: <span id="tokenIdDisplay"></span></p>
       <div id="errorMessageIPFS"></div>
+    </div>
+
+    <div id="marketplaceSection" class="section marketplace">
+      <h2>Marketplace</h2>
+      <p>Listed NFTs: <span id="listedNFTsDisplay"></span></p>
+      <input id="listTokenId" type="number" placeholder="Token ID to list">
+      <input id="listPrice" type="number" placeholder="Price in wei">
+      <button id="listButton">List for Sale</button>
+      <input id="buyTokenId" type="number" placeholder="Token ID to buy">
+      <button id="buyButton">Buy NFT</button>
+      <div id="marketplaceError"></div>
     </div>
   </div>
 
-  <!-- Load Ethers.js (no longer need ipfs-http-client) -->
-  <script src="ethers.min.js" type="application/javascript"></script>
+  <!-- Load Ethers.js from a reliable CDN -->
+  <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script>
     // Contract details
-    let contractAddress = "0x09496ed954dacbbc7f88a5b06fcf3c62e27ec9d2";
+    const contractAddress = "0xAaeae7E1b59ee74AD9FB9a077E40C801D2aEDC75";
     const contractOwner = "0xEdbA99b7F64530A7b598223435CC4d9Ca766bd41";
 
     // Variables for contract interaction
@@ -116,26 +156,43 @@
     let isOwner = false;
     let abi = null;
     let canvasInitialized = false;
-    let isConnecting = false;
+    const IPFS_UPLOAD_FEE = ethers.utils.parseEther("0.001");
 
     // DOM Elements
-    const connectButton = document.getElementById('connectButton');
     const statusElement = document.getElementById('status');
     const accountElement = document.getElementById('account');
     const creatorSection = document.getElementById('creatorSection');
     const drawingCanvas = document.getElementById('drawingCanvas');
+    const ctx = drawingCanvas.getContext('2d');
     const brushColor = document.getElementById('brushColor');
     const brushSize = document.getElementById('brushSize');
     const clearCanvasButton = document.getElementById('clearCanvasButton');
+    const drawCircleButton = document.getElementById('drawCircleButton');
+    const drawRectangleButton = document.getElementById('drawRectangleButton');
+    const drawLineButton = document.getElementById('drawLineButton');
+    const shapeColor = document.getElementById('shapeColor');
+    const shapeSize = document.getElementById('shapeSize');
     const title = document.getElementById('title');
-    const royaltyPercentage = document.getElementById('royaltyPercentage');
     const mintButton = document.getElementById('mintButton');
-    const ipfsHashDisplay = document.getElementById('ipfsHashDisplay');
+    const mintFeeDisplay = document.getElementById('mintFeeDisplay');
+    const contractAddressDisplay = document.getElementById('contractAddressDisplay');
+    const imageIpfsLink = document.getElementById('imageIpfsLink');
+    const metadataIpfsLink = document.getElementById('metadataIpfsLink');
+    const tokenIdDisplay = document.getElementById('tokenIdDisplay');
     const errorMessage = document.getElementById('errorMessage');
     const errorMessageIPFS = document.getElementById('errorMessageIPFS');
+    const pdfFile = document.getElementById('pdfFile');
+    const pdfUrl = document.getElementById('pdfUrl');
+    const marketplaceSection = document.getElementById('marketplaceSection');
+    const listedNFTsDisplay = document.getElementById('listedNFTsDisplay');
+    const listTokenId = document.getElementById('listTokenId');
+    const listPrice = document.getElementById('listPrice');
+    const listButton = document.getElementById('listButton');
+    const buyTokenId = document.getElementById('buyTokenId');
+    const buyButton = document.getElementById('buyButton');
+    const marketplaceError = document.getElementById('marketplaceError');
 
     // Canvas drawing setup
-    const ctx = drawingCanvas.getContext('2d');
     if (!ctx) {
       console.error("Failed to get 2D context for canvas");
       errorMessage.innerHTML = '<div class="error"><p>Canvas context failed to initialize. Check browser compatibility.</p></div>';
@@ -154,6 +211,9 @@
       drawingCanvas.addEventListener('mouseup', stopDrawing);
       drawingCanvas.addEventListener('mouseout', stopDrawing);
       clearCanvasButton.addEventListener('click', clearCanvas);
+      drawCircleButton.addEventListener('click', drawCircle);
+      drawRectangleButton.addEventListener('click', drawRectangle);
+      drawLineButton.addEventListener('click', drawLine);
     }
 
     function startDrawing(e) {
@@ -186,6 +246,79 @@
       }
     }
 
+    function drawCircle() {
+      if (canvasInitialized) {
+        ctx.beginPath();
+        ctx.arc(drawingCanvas.width / 2, drawingCanvas.height / 2, shapeSize.value / 2, 0, Math.PI * 2);
+        ctx.fillStyle = shapeColor.value;
+        ctx.fill();
+        ctx.strokeStyle = shapeColor.value;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+
+    function drawRectangle() {
+      if (canvasInitialized) {
+        ctx.beginPath();
+        ctx.rect(drawingCanvas.width / 2 - shapeSize.value / 2, drawingCanvas.height / 2 - shapeSize.value / 4, shapeSize.value, shapeSize.value / 2);
+        ctx.fillStyle = shapeColor.value;
+        ctx.fill();
+        ctx.strokeStyle = shapeColor.value;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+
+    function drawLine() {
+      if (canvasInitialized) {
+        ctx.beginPath();
+        ctx.moveTo(0, drawingCanvas.height / 2);
+        ctx.lineTo(drawingCanvas.width, drawingCanvas.height / 2);
+        ctx.strokeStyle = shapeColor.value;
+        ctx.lineWidth = shapeSize.value / 10;
+        ctx.stroke();
+      }
+    }
+
+    async function handlePdfUpload(event) {
+      const file = event.target.files[0];
+      if (file && file.type === 'application/pdf') {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 1 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const context = canvas.getContext('2d');
+        await page.render({ canvasContext: context, viewport: viewport }).promise;
+        drawingCanvas.getContext('2d').drawImage(canvas, 0, 0, drawingCanvas.width, drawingCanvas.height);
+      } else {
+        alert('Please upload a valid PDF file.');
+      }
+    }
+
+    async function handlePdfUrl(event) {
+      const url = event.target.value;
+      try {
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 1 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const context = canvas.getContext('2d');
+        await page.render({ canvasContext: context, viewport: viewport }).promise;
+        drawingCanvas.getContext('2d').drawImage(canvas, 0, 0, drawingCanvas.width, drawingCanvas.height);
+      } catch (error) {
+        alert('Error loading PDF from URL. Ensure the URL is accessible and supports CORS.');
+        console.error('PDF URL error:', error);
+      }
+    }
+
     // Load ABI from file
     async function loadABI() {
       try {
@@ -194,7 +327,7 @@
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
         abi = await response.json();
         console.log("ABI loaded successfully:", abi.length, "entries");
-        statusElement.innerText = "Contract ABI loaded successfully";
+        statusElement.innerText = "Contract ABI loaded";
       } catch (error) {
         console.error("Error loading ABI:", error);
         statusElement.innerText = "Error loading ABI file";
@@ -212,80 +345,89 @@
       }
     }
 
-    // Initialize the page
+    // Initialize the page and auto-connect MetaMask
     async function init() {
-      statusElement.innerText = "Initializing...";
       await loadABI();
-    }
-
-    // Connect to wallet
-    async function connectWallet() {
-      if (isConnecting) {
+      if (typeof ethers === 'undefined') {
         errorMessage.innerHTML = `
           <div class="error">
-            <p><strong>Error:</strong> A wallet connection request is already in progress. Please wait.</p>
+            <p><strong>Error:</strong> Ethers.js failed to load. Check your internet connection or use a local copy of ethers.js.</p>
+            <p>Try downloading <a href="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js" download>ethers.js</a> and hosting it locally.</p>
           </div>
         `;
         return;
       }
 
-      isConnecting = true;
-      connectButton.disabled = true;
-      connectButton.textContent = "Connecting...";
-
-      try {
-        if (!abi) {
-          alert("Contract ABI not loaded. Please refresh the page and try again.");
-          return;
-        }
-
-        if (window.ethereum == null) {
-          statusElement.innerText = "MetaMask not installed; using read-only defaults";
-          provider = ethers.getDefaultProvider();
-          contract = new ethers.Contract(contractAddress, abi, provider);
-        } else {
-          provider = new ethers.BrowserProvider(window.ethereum);
+      if (window.ethereum) {
+        try {
+          provider = new ethers.providers.Web3Provider(window.ethereum);
           await provider.send("eth_requestAccounts", []);
-          signer = await provider.getSigner();
+          signer = provider.getSigner();
           userAddress = await signer.getAddress();
           const network = await provider.getNetwork();
           statusElement.innerText = `Connected to ${network.name || 'chain ID ' + network.chainId}`;
-
+          accountElement.innerText = userAddress;
           contract = new ethers.Contract(contractAddress, abi, signer);
           const code = await provider.getCode(contractAddress);
           if (code === '0x' || code === '0x0') {
             throw new Error("No contract deployed at the specified address.");
           }
-
           const ownerAddress = await contract.owner();
           isOwner = (ownerAddress.toLowerCase() === userAddress.toLowerCase());
-
-          statusElement.innerText = "Connected";
-          accountElement.innerText = userAddress;
           creatorSection.style.display = "block";
+          marketplaceSection.style.display = "block";
+          contractAddressDisplay.innerText = contractAddress;
+          await updateMintFee();
+          await updateListedNFTs();
+        } catch (error) {
+          console.error("MetaMask connection error:", error);
+          statusElement.innerText = "Connection failed: " + (error.message || "User denied connection or MetaMask not configured.");
+          errorMessage.innerHTML = `
+            <div class="error">
+              <p><strong>Error:</strong> ${error.message || "Please ensure MetaMask is installed and unlocked, then refresh the page."}</p>
+            </div>
+          `;
+          if (window.ethereum) {
+            provider = new ethers.providers.Web3Provider(window.ethereum);
+            contract = new ethers.Contract(contractAddress, abi, provider);
+          } else {
+            provider = ethers.getDefaultProvider();
+            contract = new ethers.Contract(contractAddress, abi, provider);
+          }
         }
+      } else {
+        statusElement.innerText = "MetaMask not detected; using read-only mode";
+        provider = ethers.getDefaultProvider();
+        contract = new ethers.Contract(contractAddress, abi, provider);
+      }
+    }
+
+    // Update minting fee display
+    async function updateMintFee() {
+      try {
+        const mintPrice = await contract.mintPrice();
+        mintFeeDisplay.innerText = ethers.utils.formatEther(mintPrice);
+        console.log("Mint price fetched:", mintPrice.toString());
       } catch (error) {
-        console.error("Connection error:", error);
-        let errorMsg = error.message;
-        if (error.code === -32002) {
-          errorMsg = "A MetaMask connection request is already pending. Please open MetaMask, approve or deny the request, or try refreshing the page.";
-        }
-        statusElement.innerText = "Connection failed: " + errorMsg;
-        errorMessage.innerHTML = `
-          <div class="error">
-            <p><strong>Error:</strong> ${errorMsg}</p>
-          </div>
-        `;
-      } finally {
-        isConnecting = false;
-        connectButton.disabled = false;
-        connectButton.textContent = "Connect Wallet";
+        console.error("Error fetching mint price:", error);
+        mintFeeDisplay.innerText = "Error fetching fee";
+      }
+    }
+
+    // Update listed NFTs display
+    async function updateListedNFTs() {
+      try {
+        const listedNFTs = await contract.getListedNFTs();
+        listedNFTsDisplay.innerText = listedNFTs.join(", ") || "None";
+      } catch (error) {
+        console.error("Error fetching listed NFTs:", error);
+        listedNFTsDisplay.innerText = "Error fetching listings";
       }
     }
 
     // Upload to Pinata IPFS and mint
-    // Replace the saveToPinataAndMint function with this improved version:
-async function saveToPinataAndMint() {
+    // Upload to Pinata IPFS and mint
+    async function saveToPinataAndMint() {
   if (!canvasInitialized) {
     errorMessageIPFS.innerHTML = `
       <div class="error">
@@ -295,12 +437,10 @@ async function saveToPinataAndMint() {
     return;
   }
 
-  // Disable the mint button to prevent multiple clicks
   mintButton.disabled = true;
   mintButton.textContent = "Processing...";
 
   const titleValue = title.value.trim();
-  const royalty = parseInt(royaltyPercentage.value) || 0;
 
   if (!titleValue) {
     alert("Please provide a valid title for your drawing.");
@@ -309,44 +449,28 @@ async function saveToPinataAndMint() {
     return;
   }
 
-  if (royalty > 1000) {
-    alert("Royalty percentage cannot exceed 1000 basis points (10%).");
-    mintButton.disabled = false;
-    mintButton.textContent = "Save to Pinata IPFS and Mint";
-    return;
-  }
-
   let pinataResponse = null;
 
   try {
-    errorMessageIPFS.innerHTML = ""; // Clear previous errors
+    errorMessageIPFS.innerHTML = "";
     statusElement.innerText = "Converting canvas to image...";
 
-    // Convert canvas to Blob
     const dataUrl = drawingCanvas.toDataURL('image/png');
     const response = await fetch(dataUrl);
     const blob = await response.blob();
 
-    // Log blob size for debugging
-    const blobSize = blob.size / 1024; // Size in KB
+    const blobSize = blob.size / 1024;
     console.log("Blob size:", blobSize, "KB");
 
-    statusElement.innerText = "Uploading to Pinata IPFS...";
+    statusElement.innerText = "Uploading image to Pinata IPFS...";
 
-    // Prepare the form data for Pinata
     const formData = new FormData();
     formData.append('file', blob, 'drawing.png');
-
-    // Optional: Add metadata (e.g., name)
-    const pinataMetadata = JSON.stringify({
-      name: titleValue
-    });
+    const pinataMetadata = JSON.stringify({ name: titleValue });
     formData.append('pinataMetadata', pinataMetadata);
 
-    // Set your Pinata JWT token - replace with your actual token
-    const PINATA_JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySW5mb3JtYXRpb24iOnsiaWQiOiJiN2ZkNTEwNS01NGVkLTQzNGItOWI4Ny0wYTA5ZTlkYjkwNTgiLCJlbWFpbCI6ImlhbmxpZWJlcm1hbjA3QGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJwaW5fcG9saWN5Ijp7InJlZ2lvbnMiOlt7ImRlc2lyZWRSZXBsaWNhdGlvbkNvdW50IjoxLCJpZCI6IkZSQTEifSx7ImRlc2lyZWRSZXBsaWNhdGlvbkNvdW50IjoxLCJpZCI6Ik5ZQzEifV0sInZlcnNpb24iOjF9LCJtZmFfZW5hYmxlZCI6ZmFsc2UsInN0YXR1cyI6IkFDVElWRSJ9LCJhdXRoZW50aWNhdGlvblR5cGUiOiJzY29wZWRLZXkiLCJzY29wZWRLZXlLZXkiOiJjZTM5YTg3MGQwNjM1ODA0MmE2YyIsInNjb3BlZEtleVNlY3JldCI6ImQ2MDFkODU2ODVhNTZmNGYxNGI3OGU3ZjdiZmNhZDdiNmY0NmU0NmJmYmM4ZWU3YjMzNjBjMDBiOGI3MGMwZjciLCJleHAiOjE3NzM4NjcwMzB9.v2IABzSoZSlSH9MpfkYaww-pF2ijMcQDE7sTuWsIv3M"; // Replace this with your valid JWT
+    const PINATA_JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySW5mb3JtYXRpb24iOnsiaWQiOiJiN2ZkNTEwNS01NGVkLTQzNGItOWI4Ny0wYTA5ZTlkYjkwNTgiLCJlbWFpbCI6ImlhbmxpZWJlcm1hbjA3QGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJwaW5fcG9saWN5Ijp7InJlZ2lvbnMiOlt7ImRlc2lyZWRSZXBsaWNhdGlvbkNvdW50IjoxLCJpZCI6IkZSQTEifSx7ImRlc2lyZWRSZXBsaWNhdGlvbkNvdW50IjoxLCJpZCI6Ik5ZQzEifV0sInZlcnNpb24iOjF9LCJtZmFfZW5hYmxlZCI6ZmFsc2UsInN0YXR1cyI6IkFDVElWRSJ9LCJhdXRoZW50aWNhdGlvblR5cGUiOiJzY29wZWRLZXkiLCJzY29wZWRLZXlLZXkiOiJjZTM5YTg3MGQwNjM1ODA0MmE2YyIsInNjb3BlZEtleVNlY3JldCI6ImQ2MDFkODU2ODVhNTZmNGYxNGI3OGU3ZjdiZmNhZDdiNmY0NmU0NmJmYmM4ZWU3YjMzNjBjMDBiOGI3MGMwZjciLCJleHAiOjE3NzM4NjcwMzB9.v2IABzSoZSlSH9MpfkYaww-pF2ijMcQDE7sTuWsIv3M";
 
-    // Make the request to Pinata's /pinning/pinFileToIPFS endpoint
     pinataResponse = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
       method: 'POST',
       headers: {
@@ -359,68 +483,216 @@ async function saveToPinataAndMint() {
       const errorData = await pinataResponse.json().catch(() => ({
         error: `HTTP error! Status: ${pinataResponse.status}`
       }));
-      
       throw new Error(`Pinata API responded with status: ${pinataResponse.status}. ${errorData.error || ''}`);
     }
 
-    const result = await pinataResponse.json();
-    const ipfsHash = result.IpfsHash;
-    ipfsHashDisplay.innerText = ipfsHash;
-    console.log("IPFS Hash:", ipfsHash);
+    const imageResult = await pinataResponse.json();
+    const imageIpfsHash = imageResult.IpfsHash;
+    const imageHttpsUrl = `https://gateway.pinata.cloud/ipfs/${imageIpfsHash}`;
+    imageIpfsLink.innerHTML = `<a href="${imageHttpsUrl}" target="_blank">View image</a>`;
+    console.log("Image IPFS Hash:", imageIpfsHash);
+    console.log("Image HTTPS URL:", imageHttpsUrl);
 
-    statusElement.innerText = "Minting NFT...";
-    const tx = await contract.mintDrawingNFT(ipfsHash, titleValue, royalty, { value: await contract.mintPrice() });
-    await tx.wait();
+    statusElement.innerText = "Generating metadata and uploading to Pinata IPFS...";
+    const metadata = {
+      name: titleValue,
+      description: `A drawing created by ${userAddress} on the Drawing NFT Platform`,
+      image: imageHttpsUrl // Ensure HTTPS URL
+    };
+    const metadataBlob = new Blob([JSON.stringify(metadata)], { type: 'application/json' });
+    const metadataFormData = new FormData();
+    metadataFormData.append('file', metadataBlob, 'metadata.json');
+    metadataFormData.append('pinataMetadata', JSON.stringify({ name: `${titleValue}_metadata` }));
+
+    const metadataResponse = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PINATA_JWT}`
+      },
+      body: metadataFormData
+    });
+
+    if (!metadataResponse.ok) {
+      const errorData = await metadataResponse.json().catch(() => ({
+        error: `HTTP error! Status: ${metadataResponse.status}`
+      }));
+      throw new Error(`Pinata API responded with status: ${metadataResponse.status}. ${errorData.error || ''}`);
+    }
+
+    const metadataResult = await metadataResponse.json();
+    const metadataIpfsHash = metadataResult.IpfsHash;
+    const metadataHttpsUrl = `https://gateway.pinata.cloud/ipfs/${metadataIpfsHash}`;
+    metadataIpfsLink.innerHTML = `<a href="${metadataHttpsUrl}" target="_blank">View metadata</a>`;
+    console.log("Metadata IPFS Hash:", metadataIpfsHash);
+    console.log("Metadata HTTPS URL:", metadataHttpsUrl);
+
+    // Verify metadata
+    const metadataResponseCheck = await fetch(metadataHttpsUrl);
+    const metadataJson = await metadataResponseCheck.json();
+    console.log("Fetched Metadata:", metadataJson);
+    if (!metadataJson.image || metadataJson.image !== imageHttpsUrl) {
+      throw new Error("Metadata image URL mismatch or missing");
+    }
+
+    statusElement.innerText = "Minting NFT... (MetaMask will prompt for confirmation)";
+    const mintPrice = await contract.mintPrice();
+    console.log("Mint price before transaction:", mintPrice.toString());
+    if (!ethers.BigNumber.isBigNumber(mintPrice) || mintPrice.isZero()) {
+      throw new Error("Invalid mintPrice: " + mintPrice.toString());
+    }
+
+    const royaltyPercentage = ethers.BigNumber.from("250"); // 2.5% royalty
+    const tx = await contract.mintDrawingNFT(
+      imageIpfsHash,
+      metadataIpfsHash,
+      titleValue,
+      royaltyPercentage,
+      { value: mintPrice.toString() }
+    );
+    const receipt = await tx.wait();
+
+    let tokenId = null;
+    const eventSignature = ethers.utils.id("DrawingMinted(uint256,address,string,string,string,uint256)");
+    const event = receipt.logs.find(log => log.topics[0] === eventSignature);
+    if (event) {
+      const iface = new ethers.utils.Interface(abi);
+      const parsedLog = iface.parseLog(event);
+      tokenId = parsedLog.args.tokenId.toNumber();
+    } else {
+      throw new Error("Failed to find DrawingMinted event in transaction logs.");
+    }
+
+    if (!tokenId) {
+      throw new Error("Failed to extract Token ID from event logs.");
+    }
+
     statusElement.innerText = "NFT minted successfully!";
+    tokenIdDisplay.innerHTML = tokenId;
+
+    // Attempt to add to MetaMask with explicit image
+    try {
+      console.log("Sending to wallet_watchAsset:", {
+        address: contractAddress,
+        tokenId: tokenId.toString(),
+        name: titleValue,
+        symbol: "DRAW",
+        image: imageHttpsUrl
+      });
+      const result = await window.ethereum.request({
+        method: 'wallet_watchAsset',
+        params: {
+          type: 'ERC721',
+          options: {
+            address: contractAddress,
+            tokenId: tokenId.toString(),
+            name: titleValue,
+            decimals: 0,
+            symbol: 'DRAW',
+            image: imageHttpsUrl // Force HTTPS image URL
+          }
+        }
+      });
+      console.log("wallet_watchAsset result:", result);
+      if (result) {
+        statusElement.innerText = "NFT added to MetaMask! Please wait a moment or switch networks to refresh.";
+        setTimeout(() => {
+          alert("NFT added successfully! If the image isn’t visible, switch networks (e.g., to Mainnet and back) or restart MetaMask.");
+        }, 2000);
+      } else {
+        throw new Error("wallet_watchAsset returned false");
+      }
+    } catch (addError) {
+      console.error("Error adding NFT to MetaMask:", addError);
+      statusElement.innerText = "NFT minted successfully, but manual import may be required.";
+      errorMessageIPFS.innerHTML = `
+        <div class="error">
+          <p><strong>Warning:</strong> Failed to auto-add NFT to MetaMask. Please import manually:</p>
+          <ul>
+            <li>Contract Address: ${contractAddress}</li>
+            <li>Token ID: ${tokenId}</li>
+            <li>Token URI: ${metadataHttpsUrl}</li>
+            <li>Image URL: ${imageHttpsUrl}</li>
+          </ul>
+          <p>Steps: In MetaMask, go to Assets > NFTs > Import NFT, paste the above details. Ensure you're on the correct network (e.g., Sepolia).</p>
+        </div>
+      `;
+    }
+
     clearCanvas();
     title.value = "";
-    royaltyPercentage.value = "";
   } catch (error) {
     console.error("Error uploading to Pinata IPFS or minting:", error);
     statusElement.innerText = "Error occurred";
-    
-    let errorMsg = "An error occurred while uploading to Pinata IPFS or minting.";
-    let possibleIssues = `
-      <ul>
-        <li>Invalid Pinata JWT token</li>
-        <li>Network connectivity issues</li>
-        <li>File size limit exceeded (check Pinata limits)</li>
-        <li>CORS policy blocking the request (try deploying to a live server)</li>
-      </ul>
-    `;
-
-    if (error.message.includes("401")) {
-      errorMsg = "Unauthorized: Invalid Pinata JWT token. Please check your token and try again.";
-    } else if (error.message.includes("413")) {
-      errorMsg = "File size limit exceeded. Check Pinata limits.";
-    } else if (error.message.includes("network")) {
-      errorMsg = "Network connectivity issue detected.";
-    } else if (error.message.includes("CORS")) {
-      errorMsg = "CORS policy blocked the request. Try deploying the app to a live server.";
-    }
-
     errorMessageIPFS.innerHTML = `
       <div class="error">
-        <p><strong>Error:</strong> ${errorMsg}</p>
+        <p><strong>Error:</strong> ${error.message || "An error occurred while uploading to Pinata IPFS or minting."}</p>
         <p>Possible issues:</p>
-        ${possibleIssues}
-        <p>Check the console for details.</p>
+        <ul>
+          <li>Invalid Pinata JWT token</li>
+          <li>Insufficient funds for IPFS upload fee (0.001 ETH) or minting fee</li>
+          <li>Network connectivity issues</li>
+          <li>File size limit exceeded (check Pinata limits)</li>
+          <li>CORS policy blocking the request</li>
+          <li>Invalid BigNumber value in transaction</li>
+          <li>Metadata image URL issue</li>
+        </ul>
       </div>
     `;
   } finally {
-    // Re-enable the mint button
     mintButton.disabled = false;
     mintButton.textContent = "Save to Pinata IPFS and Mint";
   }
 }
 
+    // List NFT for sale
+    async function listForSale() {
+      const tokenId = parseInt(listTokenId.value);
+      const price = ethers.utils.parseEther(listPrice.value || "0");
+      if (!tokenId || price <= 0) {
+        marketplaceError.innerHTML = '<div class="error"><p>Invalid Token ID or Price.</p></div>';
+        return;
+      }
+      try {
+        marketplaceError.innerHTML = "";
+        const tx = await contract.listDrawingForSale(tokenId, price);
+        await tx.wait();
+        statusElement.innerText = "NFT listed successfully!";
+        await updateListedNFTs();
+      } catch (error) {
+        console.error("Error listing NFT:", error);
+        marketplaceError.innerHTML = `<div class="error"><p><strong>Error:</strong> ${error.message || "Failed to list NFT."}</p></div>`;
+      }
+    }
+
+    // Buy NFT
+    async function buyNFT() {
+      const tokenId = parseInt(buyTokenId.value);
+      if (!tokenId) {
+        marketplaceError.innerHTML = '<div class="error"><p>Invalid Token ID.</p></div>';
+        return;
+      }
+      try {
+        marketplaceError.innerHTML = "";
+        const price = await contract.getListingPrice(tokenId);
+        if (price == 0) throw new Error("NFT not listed for sale.");
+        const tx = await contract.buyDrawing(tokenId, { value: price });
+        await tx.wait();
+        statusElement.innerText = "NFT purchased successfully!";
+        await updateListedNFTs();
+      } catch (error) {
+        console.error("Error buying NFT:", error);
+        marketplaceError.innerHTML = `<div class="error"><p><strong>Error:</strong> ${error.message || "Failed to buy NFT."}</p></div>`;
+      }
+    }
+
     // Add event listeners
-    connectButton.addEventListener('click', connectWallet);
     mintButton.addEventListener('click', saveToPinataAndMint);
     clearCanvasButton.addEventListener('click', clearCanvas);
+    listButton.addEventListener('click', listForSale);
+    buyButton.addEventListener('click', buyNFT);
 
-    // Initialize the application
-    init();
+    // Initialize the application when the page loads
+    window.onload = init;
   </script>
 </body>
 </html>
