@@ -1,8 +1,3 @@
-# NFTDrawing
-I'm glad everything is working perfectly now! Below is a detailed and easy-to-read `README.md` file for your `NFTDRAWING` project. It describes the project, its functionality, setup instructions, and usage in a clear and organized manner. I've used Markdown formatting to ensure it's well-structured and readable.
-
----
-
 # NFTDRAWING - Drawing NFT Platform
 
 Welcome to **NFTDRAWING**, a web-based platform that lets you create digital drawings, mint them as NFTs (Non-Fungible Tokens) on the Ethereum blockchain (Sepolia testnet), and trade them in a marketplace. This project uses Pinata IPFS for decentralized storage, Firebase Hosting for deployment, and MetaMask for blockchain interactions.
