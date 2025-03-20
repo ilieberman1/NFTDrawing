@@ -5,19 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Drawing NFT Platform - Pinata IPFS Upload</title>
 
-    <!-- Firebase SDK scripts -->
-    <script defer src="/__/firebase/11.4.0/firebase-app-compat.js"></script>
-    <script defer src="/__/firebase/11.4.0/firebase-auth-compat.js"></script>
-    <script defer src="/__/firebase/11.4.0/firebase-database-compat.js"></script>
-    <script defer src="/__/firebase/11.4.0/firebase-firestore-compat.js"></script>
-    <script defer src="/__/firebase/11.4.0/firebase-functions-compat.js"></script>
-    <script defer src="/__/firebase/11.4.0/firebase-messaging-compat.js"></script>
-    <script defer src="/__/firebase/11.4.0/firebase-storage-compat.js"></script>
-    <script defer src="/__/firebase/11.4.0/firebase-analytics-compat.js"></script>
-    <script defer src="/__/firebase/11.4.0/firebase-remote-config-compat.js"></script>
-    <script defer src="/__/firebase/11.4.0/firebase-performance-compat.js"></script>
-    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
-
     <!-- Styles -->
     <style>
       body {
@@ -87,18 +74,16 @@
         border: 1px solid red;
         background: #fff8f8;
       }
-      .shape-controls {
-        display: flex;
-        gap: 10px;
+      .info {
+        color: #555;
         margin-top: 10px;
-      }
-      .pdf-upload {
-        margin-top: 10px;
+        padding: 10px;
+        border: 1px solid #ccc;
+        background: #f9f9f9;
       }
       .marketplace {
         margin-top: 20px;
       }
-      /* New styles for the rainbow gradient color picker */
       .color-picker {
         width: 200px;
         height: 20px;
@@ -122,6 +107,36 @@
         border: 1px solid #ccc;
         border-radius: 4px;
         margin-left: 10px;
+      }
+      .nft-gallery {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+        margin-top: 10px;
+      }
+      .nft-card {
+        width: 200px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        padding: 10px;
+        background: white;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        text-align: center;
+      }
+      .nft-card img {
+        width: 100%;
+        height: 150px;
+        object-fit: cover;
+        border-radius: 4px;
+      }
+      .nft-card h3 {
+        font-size: 16px;
+        margin: 10px 0 5px;
+      }
+      .nft-card p {
+        margin: 5px 0;
+        font-size: 14px;
+        color: #555;
       }
     </style>
   </head>
@@ -147,15 +162,6 @@
           <label for="brushSize">Brush Size:</label>
           <input type="range" id="brushSize" min="1" max="50" value="5">
           <button id="clearCanvasButton">Clear Canvas</button>
-          <button id="drawCircleButton">Draw Circle</button>
-          <button id="drawRectangleButton">Draw Rectangle</button>
-          <button id="drawLineButton">Draw Line</button>
-        </div>
-        <div class="shape-controls">
-          <label for="shapeColor">Shape Color:</label>
-          <input type="color" id="shapeColor" value="#000000">
-          <label for="shapeSize">Shape Size:</label>
-          <input type="range" id="shapeSize" min="10" max="200" value="50">
         </div>
         <canvas id="drawingCanvas" width="600" height="400"></canvas>
         <input id="title" type="text" placeholder="Enter drawing title">
@@ -171,9 +177,9 @@
 
       <div id="marketplaceSection" class="section marketplace">
         <h2>Marketplace</h2>
-        <p>Listed NFTs: <span id="listedNFTsDisplay"></span></p>
+        <div id="listedNFTsDisplay" class="nft-gallery"></div>
         <input id="listTokenId" type="number" placeholder="Token ID to list">
-        <input id="listPrice" type="number" placeholder="Price in wei">
+        <input id="listPrice" type="number" placeholder="Price in Sepolia ETH">
         <button id="listButton">List for Sale</button>
         <input id="buyTokenId" type="number" placeholder="Token ID to buy">
         <button id="buyButton">Buy NFT</button>
@@ -206,11 +212,6 @@
       const ctx = drawingCanvas.getContext('2d');
       const brushSize = document.getElementById('brushSize');
       const clearCanvasButton = document.getElementById('clearCanvasButton');
-      const drawCircleButton = document.getElementById('drawCircleButton');
-      const drawRectangleButton = document.getElementById('drawRectangleButton');
-      const drawLineButton = document.getElementById('drawLineButton');
-      const shapeColor = document.getElementById('shapeColor');
-      const shapeSize = document.getElementById('shapeSize');
       const title = document.getElementById('title');
       const mintButton = document.getElementById('mintButton');
       const mintFeeDisplay = document.getElementById('mintFeeDisplay');
@@ -306,9 +307,6 @@
         drawingCanvas.addEventListener('mouseup', stopDrawing);
         drawingCanvas.addEventListener('mouseout', stopDrawing);
         clearCanvasButton.addEventListener('click', clearCanvas);
-        drawCircleButton.addEventListener('click', drawCircle);
-        drawRectangleButton.addEventListener('click', drawRectangle);
-        drawLineButton.addEventListener('click', drawLine);
       }
 
       function startDrawing(e) {
@@ -323,7 +321,7 @@
         ctx.beginPath();
         ctx.moveTo(lastX, lastY);
         ctx.lineTo(e.offsetX, e.offsetY);
-        ctx.strokeStyle = selectedColor; // Use the selected color
+        ctx.strokeStyle = selectedColor;
         ctx.lineWidth = brushSize.value;
         ctx.lineCap = 'round';
         ctx.stroke();
@@ -338,41 +336,6 @@
       function clearCanvas() {
         if (canvasInitialized) {
           ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
-        }
-      }
-
-      function drawCircle() {
-        if (canvasInitialized) {
-          ctx.beginPath();
-          ctx.arc(drawingCanvas.width / 2, drawingCanvas.height / 2, shapeSize.value / 2, 0, Math.PI * 2);
-          ctx.fillStyle = shapeColor.value;
-          ctx.fill();
-          ctx.strokeStyle = shapeColor.value;
-          ctx.lineWidth = 2;
-          ctx.stroke();
-        }
-      }
-
-      function drawRectangle() {
-        if (canvasInitialized) {
-          ctx.beginPath();
-          ctx.rect(drawingCanvas.width / 2 - shapeSize.value / 2, drawingCanvas.height / 2 - shapeSize.value / 4, shapeSize.value, shapeSize.value / 2);
-          ctx.fillStyle = shapeColor.value;
-          ctx.fill();
-          ctx.strokeStyle = shapeColor.value;
-          ctx.lineWidth = 2;
-          ctx.stroke();
-        }
-      }
-
-      function drawLine() {
-        if (canvasInitialized) {
-          ctx.beginPath();
-          ctx.moveTo(0, drawingCanvas.height / 2);
-          ctx.lineTo(drawingCanvas.width, drawingCanvas.height / 2);
-          ctx.strokeStyle = shapeColor.value;
-          ctx.lineWidth = shapeSize.value / 10;
-          ctx.stroke();
         }
       }
 
@@ -471,14 +434,83 @@
         }
       }
 
-      // Update listed NFTs display
+      // Fetch all DrawingMinted events and find the metadata IPFS hash for a specific tokenId
+      async function getMetadataIpfsHash(tokenId) {
+        try {
+          const eventFilter = contract.filters.DrawingMinted();
+          const events = await contract.queryFilter(eventFilter, 0, 'latest');
+          if (events.length === 0) {
+            throw new Error(`No DrawingMinted events found`);
+          }
+
+          const targetTokenId = ethers.BigNumber.from(tokenId);
+          const event = events.find(e => e.args.tokenId.eq(targetTokenId));
+          if (!event) {
+            throw new Error(`No DrawingMinted event found for token ID ${tokenId}`);
+          }
+
+          const metadataIpfsHash = event.args.metadataIpfsHash;
+          return metadataIpfsHash;
+        } catch (error) {
+          throw new Error(`Failed to fetch metadata IPFS hash for token ID ${tokenId}: ${error.message}`);
+        }
+      }
+
+      // Update listed NFTs display with images, metadata, and price in Sepolia ETH
       async function updateListedNFTs() {
         try {
           const listedNFTs = await contract.getListedNFTs();
-          listedNFTsDisplay.innerText = listedNFTs.join(", ") || "None";
+          if (listedNFTs.length === 0) {
+            listedNFTsDisplay.innerHTML = '<p>No NFTs listed for sale.</p>';
+            return;
+          }
+
+          listedNFTsDisplay.innerHTML = '';
+
+          for (const tokenId of listedNFTs) {
+            try {
+              const metadataIpfsHash = await getMetadataIpfsHash(tokenId);
+              const tokenURI = `https://gateway.pinata.cloud/ipfs/${metadataIpfsHash}`;
+              console.log(`Token URI for token ID ${tokenId}: ${tokenURI}`);
+
+              const metadataResponse = await fetch(tokenURI);
+              if (!metadataResponse.ok) {
+                throw new Error(`Failed to fetch metadata for token ID ${tokenId}: ${metadataResponse.statusText}`);
+              }
+              const metadata = await metadataResponse.json();
+              console.log(`Metadata for token ID ${tokenId}:`, metadata);
+
+              if (!metadata.name || !metadata.image) {
+                throw new Error(`Invalid metadata for token ID ${tokenId}: missing name or image`);
+              }
+
+              const price = await contract.getListingPrice(tokenId);
+              if (price.eq(0)) {
+                console.warn(`Token ID ${tokenId} is not listed for sale`);
+                continue;
+              }
+              const priceInEth = ethers.utils.formatEther(price);
+
+              const nftCard = document.createElement('div');
+              nftCard.className = 'nft-card';
+              nftCard.innerHTML = `
+                <img src="${metadata.image}" alt="${metadata.name}">
+                <h3>${metadata.name}</h3>
+                <p>Token ID: ${tokenId.toString()}</p>
+                <p>Price: ${priceInEth} Sepolia ETH</p>
+              `;
+              listedNFTsDisplay.appendChild(nftCard);
+            } catch (error) {
+              console.error(`Error fetching details for token ID ${tokenId}:`, error.message, error.stack);
+              const errorCard = document.createElement('div');
+              errorCard.className = 'nft-card error';
+              errorCard.innerHTML = `<p>Error loading NFT (Token ID: ${tokenId}): ${error.message}</p>`;
+              listedNFTsDisplay.appendChild(errorCard);
+            }
+          }
         } catch (error) {
           console.error("Error fetching listed NFTs:", error);
-          listedNFTsDisplay.innerText = "Error fetching listings";
+          listedNFTsDisplay.innerHTML = `<div class="error"><p>Error fetching listings: ${error.message}</p></div>`;
         }
       }
 
@@ -582,7 +614,6 @@
           console.log("Metadata IPFS Hash:", metadataIpfsHash);
           console.log("Metadata HTTPS URL:", metadataHttpsUrl);
 
-          // Verify metadata
           const metadataResponseCheck = await fetch(metadataHttpsUrl);
           const metadataJson = await metadataResponseCheck.json();
           console.log("Fetched Metadata:", metadataJson);
@@ -675,40 +706,58 @@
 
           clearCanvas();
           title.value = "";
+          await updateListedNFTs();
         } catch (error) {
           console.error("Error uploading to Pinata IPFS or minting:", error);
-          statusElement.innerText = "Error occurred";
-          errorMessageIPFS.innerHTML = `
-            <div class="error">
-              <p><strong>Error:</strong> ${error.message || "An error occurred while uploading to Pinata IPFS or minting."}</p>
-              <p>Possible issues:</p>
-              <ul>
-                <li>Invalid Pinata JWT token</li>
-                <li>Insufficient funds for IPFS upload fee (0.001 ETH) or minting fee</li>
-                <li>Network connectivity issues</li>
-                <li>File size limit exceeded (check Pinata limits)</li>
-                <li>CORS policy blocking the request</li>
-                <li>Invalid BigNumber value in transaction</li>
-                <li>Metadata image URL issue</li>
-              </ul>
-            </div>
-          `;
+          if (error.code === 4001 || (error.message && error.message.includes("user denied"))) {
+            statusElement.innerText = "Transaction cancelled";
+            errorMessageIPFS.innerHTML = `
+              <div class="info">
+                <p>Transaction cancelled by user. You can try again if you'd like to mint your drawing.</p>
+              </div>
+            `;
+          } else {
+            statusElement.innerText = "Error occurred";
+            errorMessageIPFS.innerHTML = `
+              <div class="error">
+                <p><strong>Error:</strong> ${error.message || "An error occurred while uploading to Pinata IPFS or minting."}</p>
+                <p>Possible issues:</p>
+                <ul>
+                  <li>Invalid Pinata JWT token</li>
+                  <li>Insufficient funds for IPFS upload fee (0.001 ETH) or minting fee</li>
+                  <li>Network connectivity issues</li>
+                  <li>File size limit exceeded (check Pinata limits)</li>
+                  <li>CORS policy blocking the request</li>
+                  <li>Invalid BigNumber value in transaction</li>
+                  <li>Metadata image URL issue</li>
+                </ul>
+              </div>
+            `;
+          }
         } finally {
           mintButton.disabled = false;
           mintButton.textContent = "Save to Pinata IPFS and Mint";
         }
       }
 
-      // List NFT for sale
+      // List NFT for sale (only if the user is the owner)
       async function listForSale() {
         const tokenId = parseInt(listTokenId.value);
-        const price = ethers.utils.parseEther(listPrice.value || "0");
-        if (!tokenId || price <= 0) {
+        const priceInEth = listPrice.value || "0";
+        const price = ethers.utils.parseEther(priceInEth);
+        if (!tokenId || price.lte(0)) {
           marketplaceError.innerHTML = '<div class="error"><p>Invalid Token ID or Price.</p></div>';
           return;
         }
+
         try {
           marketplaceError.innerHTML = "";
+          // Check if the user is the owner of the NFT
+          const nftOwner = await contract.ownerOf(tokenId);
+          if (nftOwner.toLowerCase() !== userAddress.toLowerCase()) {
+            throw new Error("You are not the owner of this NFT and cannot list it for sale.");
+          }
+
           const tx = await contract.listDrawingForSale(tokenId, price);
           await tx.wait();
           statusElement.innerText = "NFT listed successfully!";
@@ -719,20 +768,47 @@
         }
       }
 
-      // Buy NFT
+      // Buy NFT and verify ownership transfer
       async function buyNFT() {
         const tokenId = parseInt(buyTokenId.value);
         if (!tokenId) {
           marketplaceError.innerHTML = '<div class="error"><p>Invalid Token ID.</p></div>';
           return;
         }
+
         try {
           marketplaceError.innerHTML = "";
           const price = await contract.getListingPrice(tokenId);
-          if (price == 0) throw new Error("NFT not listed for sale.");
-          const tx = await contract.buyDrawing(tokenId, { value: price });
+          if (price.eq(0)) throw new Error("NFT not listed for sale.");
+
+          // Check account balance
+          const balance = await provider.getBalance(userAddress);
+          const priceInEth = ethers.utils.formatEther(price);
+          const balanceInEth = ethers.utils.formatEther(balance);
+          const gasEstimate = await contract.estimateGas.buyDrawing(tokenId, { value: price });
+          const gasPrice = await provider.getGasPrice();
+          const gasCost = gasEstimate.mul(gasPrice);
+          const totalCost = price.add(gasCost);
+          if (balance.lt(totalCost)) {
+            throw new Error(
+              `Insufficient funds: You need ${ethers.utils.formatEther(totalCost)} ETH (NFT price: ${priceInEth} ETH + gas), but you have ${balanceInEth} ETH. Please add more Sepolia ETH to your account.`
+            );
+          }
+
+          // Get the current owner before the purchase
+          const originalOwner = await contract.ownerOf(tokenId);
+
+          // Perform the purchase
+          const tx = await contract.buyDrawing(tokenId, { value: price, gasLimit: gasEstimate.add(20000) });
           await tx.wait();
-          statusElement.innerText = "NFT purchased successfully!";
+
+          // Verify ownership transfer
+          const newOwner = await contract.ownerOf(tokenId);
+          if (newOwner.toLowerCase() !== userAddress.toLowerCase()) {
+            throw new Error("Ownership transfer failed: You are not the new owner of the NFT after purchase.");
+          }
+
+          statusElement.innerText = "NFT purchased successfully! Ownership transferred.";
           await updateListedNFTs();
         } catch (error) {
           console.error("Error buying NFT:", error);
@@ -748,34 +824,6 @@
 
       // Initialize the application when the page loads
       window.onload = init;
-    </script>
-
-    <!-- Firebase SDK loading script -->
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        const loadEl = document.createElement('p');
-        loadEl.id = 'load';
-        document.body.appendChild(loadEl);
-
-        try {
-          let app = firebase.app();
-          let features = [
-            'auth', 
-            'database', 
-            'firestore',
-            'functions',
-            'messaging', 
-            'storage', 
-            'analytics', 
-            'remoteConfig',
-            'performance',
-          ].filter(feature => typeof app[feature] === 'function');
-          loadEl.textContent = `Firebase SDK loaded with ${features.join(', ')}`;
-        } catch (e) {
-          console.error(e);
-          loadEl.textContent = 'Error loading the Firebase SDK, check the console.';
-        }
-      });
     </script>
   </body>
 </html>
